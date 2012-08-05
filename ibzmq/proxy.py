@@ -9,17 +9,21 @@ from twisted.internet.endpoints import TCP4ClientEndpoint
 from txzmq import ZmqFactory, ZmqEndpoint, ZmqREPConnection, ZmqEndpointType, ZmqPubConnection
 
 from statemachine import StateMachine, State
-from incoming import MESSAGE_SIZES
+from incoming import MESSAGE_PARSERS, FieldCount, Done
+
+from inspect import isgeneratorfunction
 
 import logging
 log = logging.getLogger(__name__)
 
+DEFAULT_COMMAND_ENDPOINT   = 'ipc:///var/tmp/ibtws/command'
+DEFAULT_BROADCAST_ENDPOINT = 'ipc:///var/tmp/ibtws/broadcast'
 
 # States for TWS protocol state machine.
 Disconnected        = State('Disconnected')
 Connecting          = State('Connecting')
 WaitingForMessageID = State('WaitingForMessageID')
-WaitingForMessage   = State('WaitingForMessage', 'fieldcount msgid msgversion')
+WaitingForGenerator = State('WaitingForGenerator', 'generator fieldcount cumfieldcount')
 
 Connecting.fieldcount          = 2
 WaitingForMessageID.fieldcount = 2
@@ -32,13 +36,13 @@ class IBTWSProtocol(StateMachine, LineOnlyReceiver):
     states = { Disconnected,
                Connecting,
                WaitingForMessageID,
-               WaitingForMessage }
+               WaitingForGenerator }
 
     transitions = {
         Disconnected        : { Connecting },
         Connecting          : { WaitingForMessageID },
-        WaitingForMessageID : { WaitingForMessage },
-        WaitingForMessage   : { WaitingForMessageID },
+        WaitingForMessageID : { WaitingForGenerator },
+        WaitingForGenerator : { WaitingForGenerator, WaitingForMessageID },
     }
     initial_state = Disconnected()
     
@@ -61,9 +65,15 @@ class IBTWSProtocol(StateMachine, LineOnlyReceiver):
         self._field_buffer.append(field)
 
         if len(self._field_buffer) == self.state.fieldcount:
-            state_handler = getattr(self, 'fieldsReceived_' + self.state_name)
-            state_handler(tuple(self._field_buffer))
+            self.fieldsReceived_dispatch(tuple(self._field_buffer))
             self._field_buffer = []
+
+            if not self.state.fieldcount:
+                self.fieldsReceived_dispatch(())
+
+    def fieldsReceived_dispatch(self, fields):
+        state_handler = getattr(self, 'fieldsReceived_' + self.state_name)
+        state_handler(tuple(fields))
 
     #### State specific handling of field receipt ####
 
@@ -71,7 +81,7 @@ class IBTWSProtocol(StateMachine, LineOnlyReceiver):
         self.serverVersion = int(fields[0])
         self.connectionTime = fields[1]
 
-        print(self.serverVersion, self.connectionTime)
+        log.info("Connected. Server Version: {0} Connection Time: {1}".format(self.serverVersion, self.connectionTime))
         self._zmq_requests.setTWSProtocol(self)
 
         self.transition(WaitingForMessageID())
@@ -81,13 +91,30 @@ class IBTWSProtocol(StateMachine, LineOnlyReceiver):
     def fieldsReceived_WaitingForMessageID(self, fields):
         msgid, msgversion = map(int, fields)
         log.debug('Message: {0} {1}'.format(msgid, msgversion))
-        fieldcount = MESSAGE_SIZES.get(msgid, -1)
-        self.transition(WaitingForMessage(fieldcount, msgid, msgversion))
+        parser = MESSAGE_PARSERS.get(msgid, None)
 
-    def fieldsReceived_WaitingForMessage(self, fields):
-        log.debug('Contents: ' + repr(fields))
-        self.publishFields((self.state.msgid, self.state.msgversion) + fields)
-        self.transition(WaitingForMessageID())
+        if parser:
+            generator = parser(msgid, msgversion)
+            action, fieldcount = generator.next()
+            assert action == FieldCount, 'Parsing continuation must return a field count on first yield.'
+            self.transition(WaitingForGenerator(generator, fieldcount, 2))
+        else:
+            log.error('Unimplemented message ID: {0}'.format(msgid))
+
+    def fieldsReceived_WaitingForGenerator(self, fields):
+        generator = self.state.generator
+        cumfieldcount = self.state.cumfieldcount + len(fields)
+
+        action, value = generator.send(fields)
+        if action == FieldCount:
+            self.transition(WaitingForGenerator(generator, value, cumfieldcount))
+        elif action == Done:
+            generator.close()
+            assert cumfieldcount == len(value), 'The number of consumed fields shall equal the resulting broadcast message.'
+            self.publishFields(value)
+            self.transition(WaitingForMessageID())
+        else:
+            raise Expection('Unrecognised parser action {0}.'.format(action))
 
     #### Message writing and publishing methods ####
 
@@ -137,14 +164,14 @@ class IBTWSProtocolFactory(Factory):
 
 def main():
     zmq_requests_factory = ZmqFactory()
-    zmq_requests_endpoint = ZmqEndpoint(ZmqEndpointType.bind, "ipc:///var/tmp/ibproxy")
+    zmq_requests_endpoint = ZmqEndpoint(ZmqEndpointType.bind, DEFAULT_COMMAND_ENDPOINT)
     zmq_requests = ZmqRequests(zmq_requests_factory, zmq_requests_endpoint)
 
     zmq_broadcast_factory = ZmqFactory()
-    zmq_broadcast_endpoint = ZmqEndpoint(ZmqEndpointType.connect, "ipc:///var/tmp/ibproxyout")
+    zmq_broadcast_endpoint = ZmqEndpoint(ZmqEndpointType.bind, DEFAULT_BROADCAST_ENDPOINT)
     zmq_broadcast = ZmqPubConnection(zmq_broadcast_factory, zmq_broadcast_endpoint)
 
-    api_endpoint = TCP4ClientEndpoint(reactor, "localhost", 4001)
+    api_endpoint = TCP4ClientEndpoint(reactor, "127.0.0.1", 4002)
     api_endpoint.connect(IBTWSProtocolFactory(zmq_requests, zmq_broadcast))
     reactor.run()
 
