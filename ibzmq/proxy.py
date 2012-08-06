@@ -140,6 +140,8 @@ class IBTWSProtocol(StateMachine, LineOnlyReceiver):
 ZMQ_OK_RESPONSE  = 'OK'
 ZMQ_ERR_RESPONSE = 'ERR'
 
+ZMQ_OOB_PREFIX = 'OOB'
+
 class ZmqRequests(ZmqREPConnection):
     _twsprotocol = None
 
@@ -147,12 +149,27 @@ class ZmqRequests(ZmqREPConnection):
         self._twsprotocol = protocol
 
     def gotMessage(self, messageid, msg):
-        print(repr(msg))
-        if self._twsprotocol:
-            self._twsprotocol.writeMessage(msg)
-            self.reply(messageid, ZMQ_OK_RESPONSE)
+        # Handle OOB messages.
+        if msg.startswith(ZMQ_OOB_PREFIX + '\0'):
+            fields = msg.split('\0')
+            if fields[1] == 'NOP':
+                log.debug('Sending NOP response.')
+                self.reply_ok(messageid)
+            else:
+                log.error('Unrecognized out-of-band message {0}.'.format(msg))
+                self.reply_err(messageid)
         else:
-            self.reply(messageid, ZMQ_ERR_RESPONSE)
+            if self._twsprotocol:
+                self._twsprotocol.writeMessage(msg)
+                self.reply_ok(messageid)
+            else:
+                self.reply_err(messageid)
+
+    def reply_ok(self, messageid):
+        self.reply(messageid, ZMQ_OK_RESPONSE)
+
+    def reply_err(self, messageid):
+        self.reply(messageid, ZMQ_err_RESPONSE)
 
 class IBTWSProtocolFactory(Factory):
     def __init__(self, zmq_requests, zmq_broadcast):
