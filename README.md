@@ -1,4 +1,5 @@
-# Interactive Brokers TWS API to ZeroMQ Proxy
+# IB-ØMQ
+## An Interactive Brokers TWS API to ZeroMQ Proxy
 This Python twisted application enables easier integration of the Interactive Brokers TWS API into zeromq based trading systems.
 
 The TWS API is exposed to ZeroMQ clients through two sockets:
