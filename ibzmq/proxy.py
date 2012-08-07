@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 from __future__ import print_function
 
+import sys
+
 from twisted.internet.protocol import Factory
 from twisted.protocols.basic import LineOnlyReceiver
 from twisted.internet import reactor
@@ -10,14 +12,12 @@ from txzmq import ZmqFactory, ZmqEndpoint, ZmqREPConnection, ZmqEndpointType, Zm
 
 from statemachine import StateMachine, State
 from incoming import MESSAGE_PARSERS, MESSAGE_NAMES, FieldCount, Done
+from config import Config
 
 from inspect import isgeneratorfunction
 
 import logging
 log = logging.getLogger(__name__)
-
-DEFAULT_COMMAND_ENDPOINT   = 'ipc:///var/tmp/ibtws/command'
-DEFAULT_BROADCAST_ENDPOINT = 'ipc:///var/tmp/ibtws/broadcast'
 
 # States for TWS protocol state machine.
 Disconnected        = State('Disconnected')
@@ -185,19 +185,25 @@ class IBTWSProtocolFactory(Factory):
     def buildProtocol(self, addr):
         return IBTWSProtocol(self.zmq_requests, self.zmq_broadcast)
 
-def main():
+def main(config):
     zmq_requests_factory = ZmqFactory()
-    zmq_requests_endpoint = ZmqEndpoint(ZmqEndpointType.bind, DEFAULT_COMMAND_ENDPOINT)
+    zmq_requests_endpoint = ZmqEndpoint(ZmqEndpointType.bind, config['endpoint.command'])
     zmq_requests = ZmqRequests(zmq_requests_factory, zmq_requests_endpoint)
 
     zmq_broadcast_factory = ZmqFactory()
-    zmq_broadcast_endpoint = ZmqEndpoint(ZmqEndpointType.bind, DEFAULT_BROADCAST_ENDPOINT)
+    zmq_broadcast_endpoint = ZmqEndpoint(ZmqEndpointType.bind, config['endpoint.broadcast'])
     zmq_broadcast = ZmqPubConnection(zmq_broadcast_factory, zmq_broadcast_endpoint)
 
-    api_endpoint = TCP4ClientEndpoint(reactor, "127.0.0.1", 4001)
+    api_endpoint = TCP4ClientEndpoint(reactor, config['ibtws.host'], config['ibtws.port'])
     api_endpoint.connect(IBTWSProtocolFactory(zmq_requests, zmq_broadcast))
     reactor.run()
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
-    main()
+
+    if len(sys.argv) != 2:
+        print('Usage: {0} config.yaml'.format(sys.argv[0]))
+        sys.exit(1)
+
+    config = Config(sys.argv[1])
+    main(config)

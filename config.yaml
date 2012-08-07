@@ -1,0 +1,5 @@
+ibzmq :
+    ibtws.host : 127.0.0.1
+    ibtws.port : 4002
+    endpoint.command : ipc:///var/tmp/ibtws/command
+    endpoint.broadcast : ipc:///var/tmp/ibtws/broadcast
