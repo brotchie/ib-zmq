@@ -9,7 +9,7 @@ from twisted.internet.endpoints import TCP4ClientEndpoint
 from txzmq import ZmqFactory, ZmqEndpoint, ZmqREPConnection, ZmqEndpointType, ZmqPubConnection
 
 from statemachine import StateMachine, State
-from incoming import MESSAGE_PARSERS, FieldCount, Done
+from incoming import MESSAGE_PARSERS, MESSAGE_NAMES, FieldCount, Done
 
 from inspect import isgeneratorfunction
 
@@ -90,13 +90,14 @@ class IBTWSProtocol(StateMachine, LineOnlyReceiver):
 
     def fieldsReceived_WaitingForMessageID(self, fields):
         msgid, msgversion = map(int, fields)
-        log.debug('Message: {0} {1}'.format(msgid, msgversion))
+        msgname = MESSAGE_NAMES.get(msgid, 'Unknown')
+        log.debug('Parsing: {0}({1}) {2}'.format(msgname, msgid, msgversion))
         parser = MESSAGE_PARSERS.get(msgid, None)
 
         if parser:
             generator = parser(msgid, msgversion)
             action, fieldcount = generator.next()
-            assert action == FieldCount, 'Parsing continuation must return a field count on first yield.'
+            assert action == FieldCount, 'Parsing generator must return a field count on first yield.'
             self.transition(WaitingForGenerator(generator, fieldcount, 2))
         else:
             log.error('Unimplemented message ID: {0}'.format(msgid))
@@ -110,7 +111,12 @@ class IBTWSProtocol(StateMachine, LineOnlyReceiver):
             self.transition(WaitingForGenerator(generator, value, cumfieldcount))
         elif action == Done:
             generator.close()
-            assert cumfieldcount == len(value), 'The number of consumed fields shall equal the resulting broadcast message.'
+
+            msgid = int(value[0])
+            msgname = MESSAGE_NAMES.get(msgid, 'Unknown')
+            log.info('Message Parsed. Field Count: {0:>2}, Type: ({1:02}) {2}'.format(len(value), msgid, msgname))
+
+            assert cumfieldcount == len(value), 'The number of consumed fields shall equal the length of the resulting message.'
             self.publishFields(value)
             self.transition(WaitingForMessageID())
         else:
@@ -188,10 +194,10 @@ def main():
     zmq_broadcast_endpoint = ZmqEndpoint(ZmqEndpointType.bind, DEFAULT_BROADCAST_ENDPOINT)
     zmq_broadcast = ZmqPubConnection(zmq_broadcast_factory, zmq_broadcast_endpoint)
 
-    api_endpoint = TCP4ClientEndpoint(reactor, "127.0.0.1", 4002)
+    api_endpoint = TCP4ClientEndpoint(reactor, "127.0.0.1", 4001)
     api_endpoint.connect(IBTWSProtocolFactory(zmq_requests, zmq_broadcast))
     reactor.run()
 
 if __name__ == '__main__':
-    logging.basicConfig(level=logging.DEBUG)
+    logging.basicConfig(level=logging.INFO)
     main()

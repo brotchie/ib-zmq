@@ -1,3 +1,5 @@
+FIELD_DELIMITER = '\0'
+
 # Incoming message ids.
 TICK_PRICE               = 1
 TICK_SIZE                = 2
@@ -144,7 +146,7 @@ MESSAGE_PARSERS = {
     ACCT_UPDATE_TIME:         fixed(1),
     NEXT_VALID_ID:            fixed(1),
     CONTRACT_DATA:            contractdata,
-    EXECUTION_DATA:           fixed(28),
+    EXECUTION_DATA:           fixed(27),
     MARKET_DEPTH:             fixed(6),
     MARKET_DEPTH_L2:          fixed(7),
     NEWS_BULLETINS:           fixed(4),
@@ -169,4 +171,42 @@ MESSAGE_PARSERS = {
     TICK_SNAPSHOT_END:        fixed(1),
     MARKET_DATA_TYPE:         fixed(2),
     COMMISSION_REPORT:        fixed(6),
+}
+
+MESSAGE_NAMES = {
+    TICK_PRICE:               "TickPrice",
+    TICK_SIZE:                "TickSize",
+    ORDER_STATUS:             "OrderStatus",
+    ERR_MSG:                  "ErrorMessage",
+    OPEN_ORDER:               "OpenOrder",
+    ACCT_VALUE:               "AccountValue",
+    PORTFOLIO_VALUE:          "PortfolioValue",
+    ACCT_UPDATE_TIME:         "AccountUpdateTime",
+    NEXT_VALID_ID:            "NextValidID",
+    CONTRACT_DATA:            "ContractData",
+    EXECUTION_DATA:           "ExecutionData",
+    MARKET_DEPTH:             "MarketDepth",
+    MARKET_DEPTH_L2:          "MarketDepthL2",
+    NEWS_BULLETINS:           "NewsBulletins",
+    MANAGED_ACCTS:            "ManagedAccounts",
+    RECEIVE_FA:               "ReceiveFA",
+    HISTORICAL_DATA:          "HistoricalData",
+    BOND_CONTRACT_DATA:       "BondContractData",
+    SCANNER_PARAMETERS:       "ScannerParameters",
+    SCANNER_DATA:             "ScannerData",
+    TICK_OPTION_COMPUTATION:  "TickOptionComputation",
+    TICK_GENERIC:             "TickGeneric",
+    TICK_STRING:              "TickString",
+    TICK_EFP:                 "TickEFP",
+    CURRENT_TIME:             "CurrentTime",
+    REAL_TIME_BARS:           "RealTimeBars",
+    FUNDAMENTAL_DATA:         "FundamentalData",
+    CONTRACT_DATA_END:        "ContractDataEnd",
+    OPEN_ORDER_END:           "OrderOpenEnd",
+    ACCT_DOWNLOAD_END:        "AccountDownloadEnd",
+    EXECUTION_DATA_END:       "ExecutionDataEnd",
+    DELTA_NEUTRAL_VALIDATION: "DeltaNeutralValidation",
+    TICK_SNAPSHOT_END:        "TickSnapshotEnd",
+    MARKET_DATA_TYPE:         "MarketDataType",
+    COMMISSION_REPORT:        "CommissionReport",
 }
