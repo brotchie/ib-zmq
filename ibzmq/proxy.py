@@ -182,7 +182,7 @@ class ZmqRequests(ZmqREPConnection):
         self.reply(messageid, ZMQ_OK_RESPONSE)
 
     def reply_err(self, messageid):
-        self.reply(messageid, ZMQ_err_RESPONSE)
+        self.reply(messageid, ZMQ_ERR_RESPONSE)
 
 class IBTWSProtocolFactory(Factory):
     def __init__(self, zmq_requests, zmq_broadcast):
