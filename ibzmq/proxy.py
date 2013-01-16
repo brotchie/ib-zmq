@@ -133,7 +133,7 @@ class IBTWSProtocol(StateMachine, LineOnlyReceiver):
 
     def publishFields(self, fields):
         """
-        Publishes a set of yields as an atomic message via
+        Publishes a set of fields as an atomic message via
         ZeroMQ.
 
         """
